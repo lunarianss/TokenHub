@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -80,16 +79,16 @@ func acquireSQLiteMigrationLock(lockCtx, parent context.Context, db *sql.DB, wai
 		return nil, fmt.Errorf("dbschema: open sqlite migration lock file: %w", err)
 	}
 	for {
-		err := syscall.Flock(int(handle.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-		if err == nil {
-			return func() {
-				_ = syscall.Flock(int(handle.Fd()), syscall.LOCK_UN)
-				_ = handle.Close()
-			}, nil
-		}
-		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
+		acquired, err := tryLockFile(handle)
+		if err != nil {
 			_ = handle.Close()
 			return nil, fmt.Errorf("dbschema: acquire sqlite migration lock: %w", err)
+		}
+		if acquired {
+			return func() {
+				_ = unlockFile(handle)
+				_ = handle.Close()
+			}, nil
 		}
 		logf("dbschema: waiting for sqlite schema migration lock %q (bounded at %s)", lockPath, wait)
 		if err := waitForLockPoll(lockCtx); err != nil {

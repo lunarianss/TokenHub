@@ -2,20 +2,23 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/mattn/go-sqlite3"
-	gormsqlite "gorm.io/driver/sqlite"
+	gosqlite "github.com/glebarez/go-sqlite"
+	gormsqlite "github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -775,17 +778,13 @@ func openAdminOAuthClockSkewSQLiteStores(t *testing.T, databaseTime time.Time) (
 	t.Helper()
 	driverName := NewID("sqlite_oauth_clock")
 	julianDay := float64(databaseTime.UnixNano())/float64(time.Second)/(24*60*60) + 2440587.5
-	sql.Register(driverName, &sqlite3.SQLiteDriver{ConnectHook: func(connection *sqlite3.SQLiteConn) error {
-		return connection.RegisterFunc("julianday", func(value string) (float64, error) {
-			if value != "now" {
-				return 0, fmt.Errorf("unsupported julianday argument %q", value)
-			}
-			return julianDay, nil
-		}, true)
-	}})
+	// The pure Go driver registers SQL functions for every connection in the
+	// process, so this driver skews only its own connections by rewriting the
+	// database clock reads before SQLite sees them.
+	sql.Register(driverName, julianDayNowSQLiteDriver{now: strconv.FormatFloat(julianDay, 'f', -1, 64)})
 	databasePath := filepath.Join(t.TempDir(), "oauth-exchange-clock.db")
 	openStore := func() *GormStore {
-		database, err := gorm.Open(gormsqlite.New(gormsqlite.Config{DriverName: driverName, DSN: databasePath}), &gorm.Config{})
+		database, err := gorm.Open(&gormsqlite.Dialector{DriverName: driverName, DSN: databasePath}, &gorm.Config{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -801,6 +800,43 @@ func openAdminOAuthClockSkewSQLiteStores(t *testing.T, databaseTime time.Time) (
 		return &GormStore{db: database, dbDriver: "sqlite"}
 	}
 	return openStore(), openStore()
+}
+
+type julianDayNowSQLiteDriver struct {
+	now string
+}
+
+func (d julianDayNowSQLiteDriver) Open(name string) (driver.Conn, error) {
+	connection, err := (&gosqlite.Driver{}).Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return julianDayNowConn{Conn: connection, now: d.now}, nil
+}
+
+type julianDayNowConn struct {
+	driver.Conn
+	now string
+}
+
+func (c julianDayNowConn) rewrite(query string) string {
+	return strings.ReplaceAll(query, "julianday('now')", c.now)
+}
+
+func (c julianDayNowConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	return c.Conn.(driver.ConnPrepareContext).PrepareContext(ctx, c.rewrite(query))
+}
+
+func (c julianDayNowConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	return c.Conn.(driver.QueryerContext).QueryContext(ctx, c.rewrite(query), args)
+}
+
+func (c julianDayNowConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	return c.Conn.(driver.ExecerContext).ExecContext(ctx, c.rewrite(query), args)
+}
+
+func (c julianDayNowConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+	return c.Conn.(driver.ConnBeginTx).BeginTx(ctx, opts)
 }
 
 func TestAdminOAuthStartBoundsPendingFlowsPerSourceAndProvider(t *testing.T) {

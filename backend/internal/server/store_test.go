@@ -536,7 +536,7 @@ func TestAdminUserChangesAllowedWhenAnotherAdminRemains(t *testing.T) {
 
 func TestLegacyProjectTeamMigrationPreservesAccess(t *testing.T) {
 	databasePath := filepath.Join(t.TempDir(), "legacy.db")
-	db, err := sql.Open("sqlite3", databasePath)
+	db, err := sql.Open("sqlite", databasePath)
 	if err != nil {
 		t.Fatal(err)
 	}

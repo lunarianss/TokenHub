@@ -354,7 +354,7 @@ This runs the **production** build — the same standalone bundle a deployment r
 
 With `-d` the services detach from the launching shell and keep running after it exits — and after the terminal closes — but not across a reboot; use a real installation for that. Both modes write pid files, so `status` and `stop` also work on a foreground instance. `stop` verifies that the recorded pid still belongs to this instance before signalling it, so a recycled pid is never killed by mistake, and both ports are claimed before anything starts so the script cannot report success against an unrelated service already listening.
 
-Requires Go (the version in `backend/go.mod`), Node 22 or newer, npm and a C compiler, because the backend links SQLite through cgo.
+Requires Go (the version in `backend/go.mod`), Node 22 or newer, and npm. The backend uses a pure Go SQLite driver, so no C compiler is needed.
 
 Verified on Linux. macOS lacks `setsid`, so the script falls back to walking the process tree when stopping; that path is implemented but untested on macOS.
 
