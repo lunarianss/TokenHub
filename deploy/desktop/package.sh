@@ -18,11 +18,15 @@
 #
 # Unlike the native server release, the package carries no Node.js runtime:
 # the host runs frontend/server.js with its own (Electron's ELECTRON_RUN_AS_NODE).
-# The frontend ships a platform-specific sharp binary, so run this on a
-# machine of the target platform. The backend is pure Go and cross-compiles.
+# The backend is pure Go and cross-compiles. The frontend ships a
+# platform-specific sharp binary; when the build host differs from the target,
+# the target's prebuilt sharp packages are fetched from the npm registry, so
+# one machine can build every target.
 #
 # Environment:
-#   SOURCE_DATE_EPOCH   archive timestamps (default: last commit time)
+#   SOURCE_DATE_EPOCH                  archive timestamps (default: last commit time)
+#   TOKENHUB_DESKTOP_REUSE_FRONTEND=1  skip `npm ci && npm run build` when
+#                                      frontend/.next/standalone already exists
 set -Eeuo pipefail
 
 if [ "$#" -ne 4 ]; then
@@ -139,19 +143,50 @@ log "building backend for $target_os/$target_arch"
 expect_binary "$stage/bin/tokenhub${exe_suffix}"
 chmod 0755 "$stage/bin/tokenhub${exe_suffix}"
 
-log "building frontend"
-(
-  cd "$repo_root/frontend"
-  export NEXT_TELEMETRY_DISABLED=1
-  npm ci --no-audit --no-fund
-  npm run build
-)
+if [ "${TOKENHUB_DESKTOP_REUSE_FRONTEND:-}" = "1" ] && [ -d "$repo_root/frontend/.next/standalone" ]; then
+  log "reusing existing frontend build"
+else
+  log "building frontend"
+  (
+    cd "$repo_root/frontend"
+    export NEXT_TELEMETRY_DISABLED=1
+    npm ci --no-audit --no-fund
+    npm run build
+  )
+fi
 assemble_standalone_bundle "$repo_root/frontend" "$stage/frontend" || fail "frontend standalone bundle is incomplete"
 
 # Next traces sharp into the standalone output for image optimization. npm
-# installs only the host's optional sharp binary, so a package built on the
-# wrong platform would carry a native module the target cannot load.
-sharp_dir="$stage/frontend/node_modules/@img/sharp-${node_platform}-${node_arch}"
+# installs only the host's optional sharp binary, so swap in the target's
+# prebuilt packages (same versions sharp pins) and drop every other platform's.
+img_dir="$stage/frontend/node_modules/@img"
+sharp_dir="$img_dir/sharp-${node_platform}-${node_arch}"
+if [ ! -d "$sharp_dir" ]; then
+  sharp_manifest="$stage/frontend/node_modules/sharp/package.json"
+  [ -f "$sharp_manifest" ] || fail "sharp is missing from the standalone bundle"
+  wanted=("@img/sharp-${node_platform}-${node_arch}")
+  # win32 packages bundle libvips; darwin/linux take it from a sibling package.
+  [ "$node_platform" = "win32" ] || wanted+=("@img/sharp-libvips-${node_platform}-${node_arch}")
+  fetch_dir="$work_dir/sharp-fetch"
+  mkdir -p "$fetch_dir"
+  for name in "${wanted[@]}"; do
+    pkg_version="$(node -e 'const m=require(process.argv[1]);const v=(m.optionalDependencies||{})[process.argv[2]];if(!v)process.exit(1);process.stdout.write(v)' "$sharp_manifest" "$name")" ||
+      fail "sharp does not list $name"
+    log "fetching ${name}@${pkg_version} for $target_os/$target_arch"
+    tarball="$(cd "$fetch_dir" && npm pack --silent "${name}@${pkg_version}" | tail -n 1)"
+    dest="$img_dir/${name#@img/}"
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    tar -xzf "$fetch_dir/$tarball" -C "$dest" --strip-components=1
+  done
+fi
+for platform_dir in "$img_dir"/sharp-*; do
+  [ -d "$platform_dir" ] || continue
+  case "$(basename "$platform_dir")" in
+    "sharp-${node_platform}-${node_arch}" | "sharp-libvips-${node_platform}-${node_arch}") ;;
+    *) rm -rf "$platform_dir" ;;
+  esac
+done
 sharp_binary="$(find "$sharp_dir" -type f -name '*.node' -print -quit 2>/dev/null || true)"
 [ -n "$sharp_binary" ] || fail "missing sharp binary under ${sharp_dir#"$stage/"}; build on a ${target_os}/${target_arch} machine"
 expect_binary "$sharp_binary"
