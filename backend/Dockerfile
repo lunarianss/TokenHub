@@ -31,17 +31,16 @@ ARG GOPROXY=https://proxy.golang.org,direct
 ARG TOKENHUB_VERSION=0.10.0
 ARG TOKENHUB_BUILD_TYPE=source
 ENV GOPROXY=$GOPROXY
-RUN apk add --no-cache gcc musl-dev
 COPY backend/go.mod ./backend/go.mod
 COPY backend/go.sum ./backend/go.sum
 COPY backend/cmd ./backend/cmd
 COPY backend/internal ./backend/internal
 RUN cd backend && \
     case "$TOKENHUB_BUILD_TYPE" in source|release) ;; *) exit 1 ;; esac && \
-    CGO_ENABLED=1 go build \
+    CGO_ENABLED=0 go build \
       -tags "netgo osusergo" \
       -trimpath \
-      -ldflags="-s -w -linkmode external -extldflags '-static' -X main.buildVersion=${TOKENHUB_VERSION} -X main.buildType=${TOKENHUB_BUILD_TYPE} -X main.deploymentType=container" \
+      -ldflags="-s -w -X main.buildVersion=${TOKENHUB_VERSION} -X main.buildType=${TOKENHUB_BUILD_TYPE} -X main.deploymentType=container" \
       -o /out/tokenhub ./cmd/tokenhub
 
 FROM ${NODE_IMAGE}

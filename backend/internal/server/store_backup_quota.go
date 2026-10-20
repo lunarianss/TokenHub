@@ -1,9 +1,7 @@
 package server
 
 import (
-	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -17,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	sqlite3 "github.com/mattn/go-sqlite3"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -185,76 +182,6 @@ func (s *GormStore) getSQLiteBackupLocked(id string) (SQLiteBackupRecord, error)
 		return SQLiteBackupRecord{}, notFound(err, "backup_not_found", "Backup not found")
 	}
 	return record, nil
-}
-
-func (s *GormStore) copySQLiteDatabase(path string, restore bool) error {
-	sqlDB, err := s.db.DB()
-	if err != nil {
-		return err
-	}
-	srcDB := sqlDB
-	destDB := sqlDB
-	var external *sql.DB
-	if restore {
-		external, err = sql.Open("sqlite3", path)
-		srcDB = external
-	} else {
-		_ = os.Remove(path)
-		external, err = sql.Open("sqlite3", path)
-		destDB = external
-	}
-	if err != nil {
-		return err
-	}
-	defer external.Close()
-	destConn, err := destDB.Conn(context.Background())
-	if err != nil {
-		return err
-	}
-	defer destConn.Close()
-	srcConn, err := srcDB.Conn(context.Background())
-	if err != nil {
-		return err
-	}
-	defer srcConn.Close()
-	return withSQLiteConn(destConn, func(dest *sqlite3.SQLiteConn) error {
-		return withSQLiteConn(srcConn, func(src *sqlite3.SQLiteConn) error {
-			backup, err := dest.Backup("main", src, "main")
-			if err != nil {
-				return err
-			}
-			// Finish only releases the backup handle; the copy's success is decided
-			// by Step above, and this runs in a defer where nothing could act on a
-			// failure anyway.
-			defer backup.Finish() //nolint:errcheck // release-only, result not actionable
-			for {
-				done, err := backup.Step(64)
-				if err != nil {
-					return err
-				}
-				if done {
-					return nil
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
-		})
-	})
-}
-
-func withSQLiteConn(conn *sql.Conn, fn func(*sqlite3.SQLiteConn) error) error {
-	var err error
-	rawErr := conn.Raw(func(driverConn any) error {
-		sqliteConn, ok := driverConn.(*sqlite3.SQLiteConn)
-		if !ok {
-			return fmt.Errorf("sqlite connection expected, got %T", driverConn)
-		}
-		err = fn(sqliteConn)
-		return err
-	})
-	if rawErr != nil {
-		return rawErr
-	}
-	return err
 }
 
 func fileSHA256(path string) (string, error) {

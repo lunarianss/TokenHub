@@ -62,5 +62,5 @@ backend logs to the terminal in the foreground and to
 | `run-local.sh` | Run the production build locally, no root, no systemd |
 | `standalone-bundle.sh` | Shared helper that assembles the Next.js bundle |
 
-Requires Go (the version in `backend/go.mod`), Node 22 or newer, npm and a C
-compiler, because the backend links SQLite through cgo.
+Requires Go (the version in `backend/go.mod`), Node 22 or newer, and npm. The
+backend uses a pure Go SQLite driver, so no C compiler is needed.

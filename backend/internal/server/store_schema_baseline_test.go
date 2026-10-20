@@ -10,8 +10,8 @@ import (
 	"slices"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
-	"gorm.io/driver/sqlite"
+	_ "github.com/glebarez/go-sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
@@ -79,7 +79,7 @@ func TestSQLiteBaselineSQLIsCurrent(t *testing.T) {
 		t.Fatalf("frozen SQLite baseline is stale; regenerate with %s=1 go test ./internal/server -run TestSQLiteBaselineSQLIsCurrent", baselineUpdateEnv)
 	}
 
-	freshDB, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "fresh.db"))
+	freshDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "fresh.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

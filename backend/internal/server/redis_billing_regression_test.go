@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/mattn/go-sqlite3"
-	gormsqlite "gorm.io/driver/sqlite"
+	gosqlite "github.com/glebarez/go-sqlite"
+	gormsqlite "github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
@@ -168,10 +168,10 @@ func newRedisBillingCommitFailureStore(t *testing.T) (*GormStore, *atomic.Bool, 
 	failCommit := &atomic.Bool{}
 	driverName := NewID("sqlite_redis_billing_commit_failure")
 	sql.Register(driverName, commitFailureSQLiteDriver{failCommit: failCommit})
-	database, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
+	database, err := gorm.Open(&gormsqlite.Dialector{
 		DriverName: driverName,
 		DSN:        filepath.Join(t.TempDir(), "redis-billing-commit-failure.db"),
-	}), &gorm.Config{
+	}, &gorm.Config{
 		TranslateError: true,
 		Logger:         gormlogger.Default.LogMode(gormlogger.Silent),
 	})
@@ -257,7 +257,7 @@ type commitFailureSQLiteDriver struct {
 }
 
 func (d commitFailureSQLiteDriver) Open(name string) (driver.Conn, error) {
-	connection, err := (&sqlite3.SQLiteDriver{}).Open(name)
+	connection, err := (&gosqlite.Driver{}).Open(name)
 	if err != nil {
 		return nil, err
 	}

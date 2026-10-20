@@ -407,7 +407,7 @@ func TestTokenCostCSVNeutralizesRejectedModelFormula(t *testing.T) {
 
 func TestLegacyRequestLogAttributionMigration(t *testing.T) {
 	databasePath := filepath.Join(t.TempDir(), "legacy-analytics-attribution.db")
-	db, err := sql.Open("sqlite3", databasePath)
+	db, err := sql.Open("sqlite", databasePath)
 	if err != nil {
 		t.Fatal(err)
 	}

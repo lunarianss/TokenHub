@@ -358,8 +358,8 @@ needs_backend_build() {
 
 if needs_backend_build; then
   log "Building backend"
-  # cgo is required: the SQLite driver fails at runtime without it.
-  (cd "$BACKEND_DIR" && CGO_ENABLED=1 go build -o "$BACKEND_BIN" ./cmd/tokenhub)
+  # The SQLite driver is pure Go; release builds also disable cgo.
+  (cd "$BACKEND_DIR" && CGO_ENABLED=0 go build -o "$BACKEND_BIN" ./cmd/tokenhub)
 else
   log "Backend binary is current"
 fi

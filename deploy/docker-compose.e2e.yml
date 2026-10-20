@@ -16,7 +16,7 @@ services:
     working_dir: /workspace/backend
     environment:
       TEST_POSTGRES_URL: postgresql://tokenhub:tokenhub-e2e-password@tokenhub-e2e-postgres:5432/tokenhub_e2e?sslmode=disable
-      CGO_ENABLED: "1"
+      CGO_ENABLED: "0"
     volumes:
       - ..:/workspace:ro
     depends_on:

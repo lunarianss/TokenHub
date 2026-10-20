@@ -148,7 +148,7 @@ func TestSeedDefaultModelCatalogReportsLegacyNameConflict(t *testing.T) {
 
 func TestRunStartupBootstrapUpgradesV040DatabaseWithDisabledDefaultTeam(t *testing.T) {
 	databasePath := filepath.Join(t.TempDir(), "v0.4.0.db")
-	legacyDB, err := sql.Open("sqlite3", databasePath)
+	legacyDB, err := sql.Open("sqlite", databasePath)
 	if err != nil {
 		t.Fatal(err)
 	}

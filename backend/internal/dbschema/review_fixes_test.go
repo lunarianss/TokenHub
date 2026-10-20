@@ -15,8 +15,8 @@ import (
 // that request a second connection while holding one deadlock there.
 func newSingleConnDB(t *testing.T) *sql.DB {
 	t.Helper()
-	dsn := fmt.Sprintf("file:%s?_busy_timeout=5000", filepath.Join(t.TempDir(), "single.db"))
-	db, err := sql.Open("sqlite3", dsn)
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)", filepath.Join(t.TempDir(), "single.db"))
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -27,7 +27,7 @@ func newSingleConnDB(t *testing.T) *sql.DB {
 
 func openSharedSQLiteTestDB(t *testing.T, dsn string) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", dsn)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open shared sqlite: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestNonTransactionalSuccessWithSingleConnectionPool(t *testing.T) {
 }
 
 func TestSQLiteNonTransactionalMigrationExcludesConcurrentRepair(t *testing.T) {
-	dsn := fmt.Sprintf("file:%s?_busy_timeout=5000", filepath.Join(t.TempDir(), "shared-non-transactional.db"))
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)", filepath.Join(t.TempDir(), "shared-non-transactional.db"))
 	firstDB := openSharedSQLiteTestDB(t, dsn)
 	secondDB := openSharedSQLiteTestDB(t, dsn)
 	ctx := context.Background()
@@ -147,7 +147,7 @@ func TestSQLiteNonTransactionalMigrationExcludesConcurrentRepair(t *testing.T) {
 }
 
 func TestSQLiteContractPreconditionAndMutationShareStartupLock(t *testing.T) {
-	dsn := fmt.Sprintf("file:%s?_busy_timeout=5000", filepath.Join(t.TempDir(), "shared-contract.db"))
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)", filepath.Join(t.TempDir(), "shared-contract.db"))
 	contractDB := openSharedSQLiteTestDB(t, dsn)
 	startupDB := openSharedSQLiteTestDB(t, dsn)
 	ctx := context.Background()
